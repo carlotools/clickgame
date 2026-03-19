@@ -11,25 +11,30 @@
     <script src="game.js" defer></script>
 </head>
 <body onload="init()">
+
+    <!-- Welcome Layer -->
     <div id="welcome">
         <h1>Welcome</h1>
         <button onclick="readyBtn()" class="start_btn">Start</button>
         <p>Mode: <span id="mode"></span></p>
     </div>
 
+    <!-- Game Body -->
     <div id="gameBody"></div>
 
+    <!-- Game Score Layer -->
     <div id="GameScoreLayer" class="SHADE">
         <div id="GameScoreLayer-text"></div>
-        <div id="cps"></div>
-        <div id="score"></div>
-        <div id="best"></div>
+        <div>CPS: <span id="cps"></span></div>
+        <div>SCORE: <span id="score"></span></div>
+        <div>BEST: <span id="best"></span></div>
         <button id="replay" onclick="replayBtn()">Replay</button>
         <button onclick="backBtn()">Return</button>
     </div>
 
-    <!-- Optional hidden inputs for images -->
+    <!-- Hidden file inputs for click images -->
     <input type="file" id="click-before-image" style="display:none" onchange="saveClickBeforeImage()">
     <input type="file" id="click-after-image" style="display:none" onchange="saveClickAfterImage()">
+
 </body>
 </html>
