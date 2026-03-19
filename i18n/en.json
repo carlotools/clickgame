@@ -1,0 +1,16 @@
+{
+    "lang": "en",
+    "normal": "Normal",
+    "endless": "Endless",
+    "practice": "Practice",
+    "sound-on": "Sound On",
+    "sound-off": "Sound Off",
+    "time-up": "Time's Up",
+    "calculating": "Calculating",
+    "text-level-1": "Beginner",
+    "text-level-2": "Intermediate",
+    "text-level-3": "Advanced",
+    "text-level-4": "Expert",
+    "text-level-5": "Master",
+    "time-over": "Time Over: "
+}
