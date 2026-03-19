@@ -1,186 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Bottom Tap Tile Game</title>
-<style>
-html, body { margin: 0; padding: 0; overflow: hidden; background: #eee; font-family: sans-serif; }
-#gameBody { width: 100%; height: 100vh; position: relative; }
-.GameLayer, #GameLayerBG { position: absolute; width: 100%; height: 100%; }
-.block { width: 25%; height: 25%; float: left; border: 1px solid #ccc; box-sizing: border-box; }
-#GameTimeLayer { position: absolute; top: 0; width: 100%; text-align: center; font-size: 1.5rem; color: #333; }
-#GameScoreLayer { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; text-align: center; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #000; }
-#welcome { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); color: #fff; display: flex; justify-content:center; align-items:center; font-size:2rem; z-index:10;}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Game</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.createjs.com/1.0.0/soundjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.2.1/jsencrypt.min.js"></script>
+    <script src="game.js" defer></script>
 </head>
-<body>
-<div id="gameBody"></div>
-<div id="GameTimeLayer"></div>
-<div id="GameScoreLayer">
-    <div id="GameScoreLayer-text"></div>
-    <div>Score: <span id="score">0</span></div>
-    <div>Best: <span id="best">0</span></div>
-    <button onclick="replayBtn()">Replay</button>
-    <button onclick="backBtn()">Home</button>
-</div>
-<div id="welcome">
-    <div>
-        <div>Select Mode:</div>
-        <button onclick="changeMode(MODE_NORMAL)">Normal</button>
-        <button onclick="changeMode(MODE_ENDLESS)">Endless</button>
-        <button onclick="changeMode(MODE_PRACTICE)">Practice</button>
-        <br><br>
-        <button onclick="readyBtn()">Start Game</button>
+<body onload="init()">
+    <div id="welcome">
+        <h1>Welcome</h1>
+        <button onclick="readyBtn()" class="start_btn">Start</button>
+        <p>Mode: <span id="mode"></span></p>
     </div>
-</div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://code.createjs.com/1.0.0/soundjs.min.js"></script>
-<script>
-const MODE_NORMAL = 1, MODE_ENDLESS = 2, MODE_PRACTICE = 3;
+    <div id="gameBody"></div>
 
-(function(w){
-    let body, blockSize, GameLayer=[], GameLayerBG, touchArea=[], GameTimeLayer;
-    let transform, transitionDuration, welcomeLayerClosed;
-    let mode = MODE_NORMAL;
-    let soundMode = 'on';
+    <div id="GameScoreLayer" class="SHADE">
+        <div id="GameScoreLayer-text"></div>
+        <div id="cps"></div>
+        <div id="score"></div>
+        <div id="best"></div>
+        <button id="replay" onclick="replayBtn()">Replay</button>
+        <button onclick="backBtn()">Return</button>
+    </div>
 
-    let _gameBBList = [], _gameBBListIndex = 0, _gameOver = false, _gameStart = false;
-    let _gameScore = 0, _gameTimeNum = 20, _gameStartTime = 0, _date1, deviationTime;
-    let _gameStartDatetime, _gameTime;
-
-    w.init = function(){
-        body = document.getElementById('gameBody');
-        body.style.height = window.innerHeight+'px';
-        transform = typeof(body.style.webkitTransform)!=='undefined'?'webkitTransform':'transform';
-        transitionDuration = transform.replace(/ransform/g,'ransitionDuration');
-        GameLayer.push(createGameLayer('GameLayer1'));
-        GameLayer.push(createGameLayer('GameLayer2'));
-        GameLayerBG = document.createElement('div');
-        GameLayerBG.id = 'GameLayerBG';
-        body.appendChild(GameLayerBG);
-        if(GameLayerBG.ontouchstart===null){ GameLayerBG.ontouchstart = gameTapEvent; }
-        else { GameLayerBG.onmousedown = gameTapEvent; }
-        gameInit();
-        window.addEventListener('resize', refreshSize, false);
-    }
-
-    function createGameLayer(id){
-        let layer = document.createElement('div');
-        layer.id = id;
-        layer.className = 'GameLayer';
-        for(let i=0;i<10;i++){
-            for(let j=0;j<4;j++){
-                let block = document.createElement('div');
-                block.id = id+'-'+(i*4+j);
-                block.className = 'block';
-                layer.appendChild(block);
-            }
-        }
-        body.appendChild(layer);
-        layer.children = layer.querySelectorAll('div');
-        return layer;
-    }
-
-    function gameInit(){
-        createjs.Sound.registerSound({src:"./static/music/err.mp3", id:"err"});
-        createjs.Sound.registerSound({src:"./static/music/end.mp3", id:"end"});
-        createjs.Sound.registerSound({src:"./static/music/tap.mp3", id:"tap"});
-        gameRestart();
-    }
-
-    function gameRestart(){
-        _gameBBList=[]; _gameBBListIndex=0; _gameScore=0; _gameOver=false; _gameStart=false;
-        _gameTimeNum=20; _gameStartTime=0;
-        countBlockSize();
-        refreshGameLayer(GameLayer[0]);
-        refreshGameLayer(GameLayer[1],1);
-        updatePanel();
-    }
-
-    function gameStart(){
-        _date1 = new Date();
-        _gameStartDatetime = _date1.getTime();
-        _gameStart = true;
-        _gameTime = setInterval(timer,1000);
-    }
-
-    function countBlockSize(){
-        blockSize = body.offsetWidth / 4;
-        body.style.height = window.innerHeight+'px';
-        touchArea[0] = window.innerHeight;
-        touchArea[1] = window.innerHeight - blockSize*3;
-    }
-
-    function refreshSize(){
-        countBlockSize();
-    }
-
-    function timer(){
-        _gameTimeNum--;
-        _gameStartTime++;
-        if(mode===MODE_NORMAL && _gameTimeNum<=0){
-            GameTimeLayer.innerHTML = 'TIME UP!';
-            gameOver();
-            if(soundMode==='on'){ createjs.Sound.play('end'); }
-        }
-        updatePanel();
-    }
-
-    function updatePanel(){
-        if(mode===MODE_NORMAL){ if(!_gameOver) GameTimeLayer.innerHTML = 'TIME:' + _gameTimeNum; }
-        else if(mode===MODE_ENDLESS){ GameTimeLayer.innerHTML = 'CPS:'+(_gameScore/((_gameStartDatetime?new Date().getTime():0)-_gameStartDatetime)/1000).toFixed(2); }
-        else GameTimeLayer.innerHTML = 'SCORE:' + _gameScore;
-    }
-
-    function gameOver(){
-        _gameOver = true;
-        clearInterval(_gameTime);
-        updatePanel();
-        setTimeout(()=>{ showGameScoreLayer(); },1500);
-    }
-
-    function showGameScoreLayer(){
-        $('#GameScoreLayer').css('display','block');
-        $('#score').text(_gameScore);
-        $('#best').text(_gameScore); // Placeholder
-    }
-
-    function refreshGameLayer(box,loop=0){
-        let i=Math.floor(Math.random()*4);
-        for(let j=0;j<box.children.length;j++){
-            let r = box.children[j];
-            r.notEmpty = (j%4===i);
-            r.style.background = r.notEmpty?'#3498db':'#fff';
-        }
-    }
-
-    function gameTapEvent(e){
-        if(_gameOver) return false;
-        let y = e.clientY || e.targetTouches[0].clientY;
-        let x = e.clientX || e.targetTouches[0].clientX;
-        let p = _gameBBList[_gameBBListIndex];
-        // simple check: if click inside bottom row (placeholder)
-        _gameScore++;
-        updatePanel();
-        gameLayerMoveNextRow();
-    }
-
-    function gameLayerMoveNextRow(){
-        for(let i=0;i<GameLayer.length;i++){
-            let g = GameLayer[i];
-            g.style[transform] = 'translate3D(0,'+(_gameScore*blockSize)+'px,0)';
-        }
-    }
-
-    w.changeMode = function(m){ mode = m; $('#welcome').hide(); gameRestart(); }
-    w.readyBtn = function(){ $('#welcome').hide(); gameRestart(); }
-    w.replayBtn = function(){ $('#GameScoreLayer').hide(); gameRestart(); }
-    w.backBtn = function(){ $('#GameScoreLayer').hide(); $('#welcome').show(); gameRestart(); }
-
-    w.init();
-})(window);
-</script>
+    <!-- Optional hidden inputs for images -->
+    <input type="file" id="click-before-image" style="display:none" onchange="saveClickBeforeImage()">
+    <input type="file" id="click-after-image" style="display:none" onchange="saveClickAfterImage()">
 </body>
 </html>
