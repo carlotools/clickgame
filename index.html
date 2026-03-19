@@ -1,61 +1,3 @@
-<?php
-session_start();
-
-// --- MySQL Config ---
-$host='localhost';
-$user='DB_USER';
-$pass='DB_PASS';
-$db='DB_NAME';
-$link = new mysqli($host,$user,$pass,$db);
-if($link->connect_error) die("DB Connect Error");
-$link->set_charset('utf8');
-
-// --- Handle AJAX score submission ---
-if($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['action']) && $_POST['action']=='submit_score'){
-    $name = substr(preg_replace("/[^a-zA-Z0-9]/","",$_POST['name'] ?? ''),0,30);
-    $score = intval($_POST['score'] ?? 0);
-    $message = substr(preg_replace("/[^a-zA-Z0-9 .!?]/","",$_POST['message'] ?? ''),0,150);
-
-    if($name && $score>=0){
-        // Check previous
-        $stmt = $link->prepare("SELECT score,attempts FROM tile_game_rank WHERE name=?");
-        $stmt->bind_param("s",$name);
-        $stmt->execute();
-        $stmt->bind_result($prevScore,$attempts);
-        $stmt->fetch();
-        $stmt->close();
-
-        if(isset($prevScore)){
-            $attempts+=1;
-            if($score>$prevScore){
-                $upd=$link->prepare("UPDATE tile_game_rank SET score=?,time=NOW(),message=?,attempts=? WHERE name=?");
-                $upd->bind_param("issi",$score,$message,$attempts,$name);
-                $upd->execute();
-                $upd->close();
-            }else{
-                $upd=$link->prepare("UPDATE tile_game_rank SET attempts=? WHERE name=?");
-                $upd->bind_param("is",$attempts,$name);
-                $upd->execute();
-                $upd->close();
-            }
-        } else {
-            $attempts=1;
-            $ins=$link->prepare("INSERT INTO tile_game_rank (score,name,time,attempts,message) VALUES (?,?,NOW(),?,?)");
-            $ins->bind_param("isis",$score,$name,$attempts,$message);
-            $ins->execute();
-            $ins->close();
-        }
-        echo json_encode(['success'=>true]);
-    } else { echo json_encode(['error'=>'Invalid input']); }
-    exit;
-}
-
-// --- Fetch leaderboard ---
-$leaderboard=[];
-$res = $link->query("SELECT name,score,attempts,message FROM tile_game_rank ORDER BY score DESC LIMIT 10");
-while($row=$res->fetch_assoc()) $leaderboard[]=$row;
-
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -63,102 +5,182 @@ while($row=$res->fetch_assoc()) $leaderboard[]=$row;
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Bottom Tap Tile Game</title>
 <style>
-body{margin:0;font-family:sans-serif;background:#fff;overflow:hidden;}
-#gameArea{position:relative;width:100%;height:100vh;background:#eee;}
-.tile{position:absolute;width:60px;height:60px;background:#3498db;border-radius:8px;text-align:center;line-height:60px;color:#fff;font-weight:bold;font-size:1.2em;}
-#scoreboard{position:absolute;top:0;left:0;width:100%;height:50px;background:#fff;display:flex;justify-content:space-around;align-items:center;font-size:1.2em;z-index:1000;}
-button{padding:.5em 1em;margin:2px;font-size:1em;}
-#leaderboard{position:absolute;top:60px;right:10px;background:#fff;border:1px solid #ccc;padding:10px;max-width:200px;z-index:1000;}
+html, body { margin: 0; padding: 0; overflow: hidden; background: #eee; font-family: sans-serif; }
+#gameBody { width: 100%; height: 100vh; position: relative; }
+.GameLayer, #GameLayerBG { position: absolute; width: 100%; height: 100%; }
+.block { width: 25%; height: 25%; float: left; border: 1px solid #ccc; box-sizing: border-box; }
+#GameTimeLayer { position: absolute; top: 0; width: 100%; text-align: center; font-size: 1.5rem; color: #333; }
+#GameScoreLayer { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; text-align: center; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #000; }
+#welcome { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); color: #fff; display: flex; justify-content:center; align-items:center; font-size:2rem; z-index:10;}
 </style>
 </head>
 <body>
-<div id="scoreboard">
-<div>Score: <span id="score">0</span></div>
-<div>CPS: <span id="cps">0</span></div>
-<button onclick="startGame()">Start</button>
-<button onclick="location.reload()">Home</button>
+<div id="gameBody"></div>
+<div id="GameTimeLayer"></div>
+<div id="GameScoreLayer">
+    <div id="GameScoreLayer-text"></div>
+    <div>Score: <span id="score">0</span></div>
+    <div>Best: <span id="best">0</span></div>
+    <button onclick="replayBtn()">Replay</button>
+    <button onclick="backBtn()">Home</button>
+</div>
+<div id="welcome">
+    <div>
+        <div>Select Mode:</div>
+        <button onclick="changeMode(MODE_NORMAL)">Normal</button>
+        <button onclick="changeMode(MODE_ENDLESS)">Endless</button>
+        <button onclick="changeMode(MODE_PRACTICE)">Practice</button>
+        <br><br>
+        <button onclick="readyBtn()">Start Game</button>
+    </div>
 </div>
 
-<div id="leaderboard">
-<h4>Leaderboard</h4>
-<ul>
-<?php foreach($leaderboard as $row): ?>
-<li><?php echo htmlspecialchars($row['name']).": ".$row['score']; ?></li>
-<?php endforeach; ?>
-</ul>
-</div>
-
-<div id="gameArea"></div>
-
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.createjs.com/1.0.0/soundjs.min.js"></script>
 <script>
-let gameArea=document.getElementById('gameArea');
-let scoreEl=document.getElementById('score');
-let cpsEl=document.getElementById('cps');
-let score=0,clicks=0,startTime,tiles=[],gameInterval;
+const MODE_NORMAL = 1, MODE_ENDLESS = 2, MODE_PRACTICE = 3;
 
-function startGame(){
-    score=0; clicks=0;
-    tiles=[];
-    scoreEl.textContent=0;
-    cpsEl.textContent=0;
-    gameArea.innerHTML='';
-    spawnTiles(5);
-    startTime=Date.now();
-    gameInterval=setInterval(updateGame,16);
-}
+(function(w){
+    let body, blockSize, GameLayer=[], GameLayerBG, touchArea=[], GameTimeLayer;
+    let transform, transitionDuration, welcomeLayerClosed;
+    let mode = MODE_NORMAL;
+    let soundMode = 'on';
 
-function spawnTiles(n){
-    for(let i=0;i<n;i++){
-        let t=document.createElement('div');
-        t.className='tile';
-        t.style.bottom=Math.floor(Math.random()*50)+'px';
-        t.style.left=Math.floor(Math.random()*(window.innerWidth-60))+'px';
-        t.textContent='Tap';
-        t.addEventListener('click',tileClicked);
-        gameArea.appendChild(t);
-        tiles.push(t);
+    let _gameBBList = [], _gameBBListIndex = 0, _gameOver = false, _gameStart = false;
+    let _gameScore = 0, _gameTimeNum = 20, _gameStartTime = 0, _date1, deviationTime;
+    let _gameStartDatetime, _gameTime;
+
+    w.init = function(){
+        body = document.getElementById('gameBody');
+        body.style.height = window.innerHeight+'px';
+        transform = typeof(body.style.webkitTransform)!=='undefined'?'webkitTransform':'transform';
+        transitionDuration = transform.replace(/ransform/g,'ransitionDuration');
+        GameLayer.push(createGameLayer('GameLayer1'));
+        GameLayer.push(createGameLayer('GameLayer2'));
+        GameLayerBG = document.createElement('div');
+        GameLayerBG.id = 'GameLayerBG';
+        body.appendChild(GameLayerBG);
+        if(GameLayerBG.ontouchstart===null){ GameLayerBG.ontouchstart = gameTapEvent; }
+        else { GameLayerBG.onmousedown = gameTapEvent; }
+        gameInit();
+        window.addEventListener('resize', refreshSize, false);
     }
-}
 
-function tileClicked(e){
-    let tile=e.target;
-    // Only allow bottom-most first
-    let minBottom=Math.min(...tiles.map(x=>parseFloat(x.style.bottom)));
-    if(parseFloat(tile.style.bottom) > minBottom+1) return; // can't tap upper tiles first
-    tiles=tiles.filter(x=>x!==tile);
-    tile.remove();
-    score+=10;
-    clicks+=1;
-    scoreEl.textContent=score;
-}
-
-function updateGame(){
-    tiles.forEach(t=>{
-        t.style.bottom=(parseFloat(t.style.bottom)+0.5)+'px';
-    });
-    let elapsed=(Date.now()-startTime)/1000;
-    cpsEl.textContent=(clicks/elapsed).toFixed(1);
-    // Spawn new tile periodically
-    if(Math.random()<0.02) spawnTiles(1);
-    // End game at 25s
-    if(elapsed>25){ endGame(); }
-}
-
-function endGame(){
-    clearInterval(gameInterval);
-    alert('Game Over! Score: '+score);
-    let name=prompt("Enter your name","");
-    if(name){
-        fetch('',{
-            method:'POST',
-            headers:{'Content-Type':'application/x-www-form-urlencoded'},
-            body:'action=submit_score&name='+encodeURIComponent(name)+'&score='+score
-        }).then(r=>r.json()).then(d=>{
-            if(d.success) alert('Score submitted!');
-            location.reload();
-        });
+    function createGameLayer(id){
+        let layer = document.createElement('div');
+        layer.id = id;
+        layer.className = 'GameLayer';
+        for(let i=0;i<10;i++){
+            for(let j=0;j<4;j++){
+                let block = document.createElement('div');
+                block.id = id+'-'+(i*4+j);
+                block.className = 'block';
+                layer.appendChild(block);
+            }
+        }
+        body.appendChild(layer);
+        layer.children = layer.querySelectorAll('div');
+        return layer;
     }
-}
+
+    function gameInit(){
+        createjs.Sound.registerSound({src:"./static/music/err.mp3", id:"err"});
+        createjs.Sound.registerSound({src:"./static/music/end.mp3", id:"end"});
+        createjs.Sound.registerSound({src:"./static/music/tap.mp3", id:"tap"});
+        gameRestart();
+    }
+
+    function gameRestart(){
+        _gameBBList=[]; _gameBBListIndex=0; _gameScore=0; _gameOver=false; _gameStart=false;
+        _gameTimeNum=20; _gameStartTime=0;
+        countBlockSize();
+        refreshGameLayer(GameLayer[0]);
+        refreshGameLayer(GameLayer[1],1);
+        updatePanel();
+    }
+
+    function gameStart(){
+        _date1 = new Date();
+        _gameStartDatetime = _date1.getTime();
+        _gameStart = true;
+        _gameTime = setInterval(timer,1000);
+    }
+
+    function countBlockSize(){
+        blockSize = body.offsetWidth / 4;
+        body.style.height = window.innerHeight+'px';
+        touchArea[0] = window.innerHeight;
+        touchArea[1] = window.innerHeight - blockSize*3;
+    }
+
+    function refreshSize(){
+        countBlockSize();
+    }
+
+    function timer(){
+        _gameTimeNum--;
+        _gameStartTime++;
+        if(mode===MODE_NORMAL && _gameTimeNum<=0){
+            GameTimeLayer.innerHTML = 'TIME UP!';
+            gameOver();
+            if(soundMode==='on'){ createjs.Sound.play('end'); }
+        }
+        updatePanel();
+    }
+
+    function updatePanel(){
+        if(mode===MODE_NORMAL){ if(!_gameOver) GameTimeLayer.innerHTML = 'TIME:' + _gameTimeNum; }
+        else if(mode===MODE_ENDLESS){ GameTimeLayer.innerHTML = 'CPS:'+(_gameScore/((_gameStartDatetime?new Date().getTime():0)-_gameStartDatetime)/1000).toFixed(2); }
+        else GameTimeLayer.innerHTML = 'SCORE:' + _gameScore;
+    }
+
+    function gameOver(){
+        _gameOver = true;
+        clearInterval(_gameTime);
+        updatePanel();
+        setTimeout(()=>{ showGameScoreLayer(); },1500);
+    }
+
+    function showGameScoreLayer(){
+        $('#GameScoreLayer').css('display','block');
+        $('#score').text(_gameScore);
+        $('#best').text(_gameScore); // Placeholder
+    }
+
+    function refreshGameLayer(box,loop=0){
+        let i=Math.floor(Math.random()*4);
+        for(let j=0;j<box.children.length;j++){
+            let r = box.children[j];
+            r.notEmpty = (j%4===i);
+            r.style.background = r.notEmpty?'#3498db':'#fff';
+        }
+    }
+
+    function gameTapEvent(e){
+        if(_gameOver) return false;
+        let y = e.clientY || e.targetTouches[0].clientY;
+        let x = e.clientX || e.targetTouches[0].clientX;
+        let p = _gameBBList[_gameBBListIndex];
+        // simple check: if click inside bottom row (placeholder)
+        _gameScore++;
+        updatePanel();
+        gameLayerMoveNextRow();
+    }
+
+    function gameLayerMoveNextRow(){
+        for(let i=0;i<GameLayer.length;i++){
+            let g = GameLayer[i];
+            g.style[transform] = 'translate3D(0,'+(_gameScore*blockSize)+'px,0)';
+        }
+    }
+
+    w.changeMode = function(m){ mode = m; $('#welcome').hide(); gameRestart(); }
+    w.readyBtn = function(){ $('#welcome').hide(); gameRestart(); }
+    w.replayBtn = function(){ $('#GameScoreLayer').hide(); gameRestart(); }
+    w.backBtn = function(){ $('#GameScoreLayer').hide(); $('#welcome').show(); gameRestart(); }
+
+    w.init();
+})(window);
 </script>
 </body>
 </html>
