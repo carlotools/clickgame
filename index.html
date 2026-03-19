@@ -1,55 +1,53 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html><html>
 <head>
-<meta charset="UTF-8">
-<title>Anime Click Game</title>
-<style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tap Grid Game</title><style>
 body {
   margin:0;
   font-family: Arial;
-  background: #0f172a;
-  color: white;
-  text-align: center;
+  background:#f5f5f5;
+  text-align:center;
 }
+
 button {
-  padding: 10px 20px;
-  margin: 10px;
-  border: none;
-  border-radius: 10px;
-  background: #3b82f6;
-  color: white;
-  cursor: pointer;
-  font-size: 16px;
+  padding:12px;
+  margin:5px;
+  border:none;
+  border-radius:8px;
+  background:#4CAF50;
+  color:white;
+  font-size:16px;
 }
-button:hover { background:#2563eb; }#topbar {
-position:absolute;
-top:10px;
-right:20px;
+
+#topbar {
+  position:absolute;
+  top:10px;
+  right:15px;
+  font-weight:bold;
 }
 
 .screen { display:none; }
 .active { display:block; }
 
 .grid {
-display:grid;
-grid-template-columns: repeat(4, 1fr);
-gap:10px;
-width:300px;
-margin:20px auto;
+  display:grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap:5px;
+  padding:10px;
 }
 
-.card {
-width:70px;
-height:70px;
-background-size: cover;
-border-radius:10px;
-cursor:pointer;
-border:2px solid transparent;
+.tile {
+  height:40px;
+  background:#ddd;
+  border-radius:5px;
 }
-.card:hover { border:2px solid white; }
-</style>
 
-</head><body><div id="topbar">Coins: <span id="coins">0</span></div><!-- HOME --><div id="home" class="screen active">
-  <h1>Anime Click Game</h1>
+.correct {
+  background:#4CAF50 !important;
+}
+
+</style></head><body><div id="topbar">Coins: <span id="coins">0</span></div><!-- HOME --><div id="home" class="screen active">
+  <h1>Tap Grid</h1>
   <button onclick="goPlay()">Play</button>
   <button onclick="goStore()">Store</button>
   <button onclick="goInfo()">Info</button>
@@ -60,7 +58,7 @@ border:2px solid transparent;
   <button onclick="goHome()">Return</button>
 </div><!-- STORE --><div id="store" class="screen">
   <h2>Store</h2>
-  <p>Hard Mode (Cost: 50 coins)</p>
+  <p>Hard Mode (100 coins)</p>
   <button onclick="buyHard()">Buy</button>
   <p id="ownedHard"></p>
   <button onclick="goHome()">Return</button>
@@ -84,28 +82,22 @@ let hardOwned = localStorage.getItem("hardOwned") === "true";
 
 document.getElementById("coins").innerText = coins;
 
-function clickSound() {
-  let audio = new Audio("https://www.myinstants.com/media/sounds/anime-wow-sound-effect.mp3");
-  audio.play();
-}
-
-function show(id) {
+function show(id){
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
 
-function goHome(){ clickSound(); show("home"); }
-function goInfo(){ clickSound(); show("info"); }
+function goHome(){ show("home"); }
+function goInfo(){ show("info"); }
 function goStore(){
-  clickSound();
   document.getElementById("ownedHard").innerText = hardOwned ? "Owned ✅" : "Not Owned";
   show("store");
 }
-function goPlay(){ clickSound(); show("play"); }
+function goPlay(){ show("play"); }
 
 function buyHard(){
-  if(coins >= 50){
-    coins -= 50;
+  if(coins >= 100){
+    coins -= 100;
     hardOwned = true;
     localStorage.setItem("hardOwned", true);
     updateCoins();
@@ -120,7 +112,7 @@ function updateCoins(){
   document.getElementById("coins").innerText = coins;
 }
 
-let timer, timeLeft, score;
+let timer, timeLeft, score, currentCorrect;
 
 function startGame(mode){
   if(mode==="hard" && !hardOwned){
@@ -128,12 +120,11 @@ function startGame(mode){
     return;
   }
 
-  clickSound();
   show("game");
   score = 0;
   timeLeft = 25;
 
-  let countdown = 5;
+  let countdown = 3;
   document.getElementById("status").innerText = "Starting in " + countdown;
 
   let c = setInterval(()=>{
@@ -150,6 +141,7 @@ function runGame(mode){
   timer = setInterval(()=>{
     timeLeft--;
     document.getElementById("time").innerText = timeLeft;
+
     if(timeLeft<=0){
       endGame(true);
     }
@@ -162,24 +154,22 @@ function spawn(mode){
   let grid = document.getElementById("grid");
   grid.innerHTML = "";
 
-  let total = mode==="hard" ? 12 : 8;
-  let correctIndex = Math.floor(Math.random()*total);
+  let total = mode==="hard" ? 120 : 100;
+  currentCorrect = Math.floor(Math.random()*total);
 
   for(let i=0;i<total;i++){
     let div = document.createElement("div");
-    div.className = "card";
+    div.className = "tile";
 
-    if(i===correctIndex){
-      div.style.backgroundImage = "url('https://i.imgur.com/1X6bK6k.png')";
-      div.onclick = ()=>{
-        clickSound();
+    if(i===currentCorrect){
+      div.classList.add("correct");
+    }
+
+    div.onclick = ()=>{
+      if(i === currentCorrect){
         score++;
         spawn(mode);
-      }
-    } else {
-      div.style.backgroundImage = "url('https://i.imgur.com/Z6XbK6k.png')";
-      div.onclick = ()=>{
-        clickSound();
+      } else {
         endGame(false);
       }
     }
@@ -195,14 +185,15 @@ function endGame(win){
   let speed = score / 25;
 
   if(win){
-    let earned = Math.floor(score * 2);
+    let earned = Math.floor(score * 1.5);
     coins += earned;
     updateCoins();
-    document.getElementById("resultText").innerText = "Time Up!";
+
+    document.getElementById("resultText").innerText = "You Survived!";
     document.getElementById("scoreText").innerText =
       "Score: " + score + " | Speed: " + speed.toFixed(2) + " | Coins +" + earned;
   } else {
-    document.getElementById("resultText").innerText = "You Lost!";
+    document.getElementById("resultText").innerText = "You Missed!";
     document.getElementById("scoreText").innerText =
       "Score: " + score + " | Speed: " + speed.toFixed(2);
   }
