@@ -2,7 +2,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bottom-Tap Magic Tiles</title>
+<title>Bottom-Tap Tile Game</title>
 <style>
 body {
   margin:0;
@@ -31,21 +31,29 @@ color:white;
 cursor:pointer;
 }
 
-.grid {
-display:grid;
-grid-template-columns: repeat(5, 1fr);
-gap:5px;
-max-width:400px;
-margin:20px auto;
+#gameArea {
+position:relative;
+width:100%;
+height:70vh;
+margin-top:20px;
+overflow:hidden;
+border:1px solid #ccc;
+background:#fff;
 }
 
 .tile {
+position:absolute;
+width:60px;
 height:60px;
-border-radius:5px;
-background:#ddd;
+border-radius:8px;
+background:#4CAF50;
+display:flex;
+align-items:center;
+justify-content:center;
+color:white;
+font-weight:bold;
+font-size:20px;
 }
-.tile.correct { background:#4CAF50; }
-.tile.bottom { border:2px solid #000; }
 </style>
 
 </head>
@@ -73,7 +81,7 @@ background:#ddd;
 </div><!-- GAME --><div id="game" class="screen">
   <h2 id="status">Get Ready</h2>
   <p>Time: <span id="time">25</span> | Score: <span id="score">0</span></p>
-  <div class="grid" id="grid"></div>
+  <div id="gameArea"></div>
 </div><!-- RESULT --><div id="result" class="screen">
   <h2 id="resultText"></h2>
   <p id="scoreText"></p>
@@ -113,8 +121,9 @@ function updateCoins(){
 }
 
 // Game variables
-let timer, timeLeft, score, gridRows, mode;
-const cols = 5;
+let timer, timeLeft, score, tileCount, tiles=[];
+let mode;
+const gameArea = document.getElementById("gameArea");
 
 function startGame(selectedMode){
   mode = selectedMode;
@@ -123,12 +132,13 @@ function startGame(selectedMode){
   show("game");
   score = 0;
   timeLeft = 25;
-  gridRows = 5;
-
+  tileCount = mode==="hard" ? 8 : 5;
+  tiles = [];
   document.getElementById("score").innerText = score;
 
   let countdown = 3;
   document.getElementById("status").innerText = "Starting in " + countdown;
+  gameArea.innerHTML = "";
 
   let c = setInterval(()=>{
     countdown--;
@@ -141,54 +151,54 @@ function startGame(selectedMode){
 }
 
 function runGame(){
+  document.getElementById("status").innerText = "";
   timer = setInterval(()=>{
     timeLeft--;
     document.getElementById("time").innerText = timeLeft;
     if(timeLeft<=0) endGame(true);
   },1000);
-  spawnGrid();
+  spawnTiles();
 }
 
-function spawnGrid(){
-  let grid = document.getElementById("grid");
-  grid.innerHTML = "";
+function spawnTiles(){
+  gameArea.innerHTML = "";
+  tiles = [];
 
-  // Number of rows
-  let rows = gridRows;
-  let totalTiles = rows * cols;
+  for(let i=0;i<tileCount;i++){
+    let tile = document.createElement("div");
+    tile.classList.add("tile");
 
-  // Random bottom row tile positions
-  let bottomRow = rows-1;
-  let correctTileIndex = Math.floor(Math.random()*cols);
+    // random position
+    let x = Math.random()*(gameArea.clientWidth-60);
+    let y = Math.random()*(gameArea.clientHeight-60);
+    tile.style.left = x + "px";
+    tile.style.top = y + "px";
 
-  for(let r=0; r<rows; r++){
-    for(let c=0; c<cols; c++){
-      let tile = document.createElement("div");
-      tile.classList.add("tile");
-      if(r===bottomRow) tile.classList.add("bottom");
-      if(r===bottomRow && c===correctTileIndex) tile.dataset.correct = "true";
+    tile.innerText = score + i + 1;
 
-      tile.addEventListener("click", ()=>{
-        if(r!==bottomRow) return endGame(false); // clicked above bottom row = lose
-        if(tile.dataset.correct==="true"){
-          score++;
-          document.getElementById("score").innerText = score;
-          spawnGrid(); // next tiles
-        } else {
-          endGame(false);
-        }
-      });
+    tile.addEventListener("click", ()=>{
+      // check bottom-most
+      let bottomY = Math.max(...tiles.map(t=>t.offsetTop));
+      if(tile.offsetTop < bottomY) return endGame(false);
 
-      grid.appendChild(tile);
-    }
+      // correct tap
+      score++;
+      document.getElementById("score").innerText = score;
+
+      // remove tapped tile
+      tiles = tiles.filter(t=>t!==tile);
+      spawnTiles(); // next tiles
+    });
+
+    gameArea.appendChild(tile);
+    tiles.push(tile);
   }
 }
 
 function endGame(win){
   clearInterval(timer);
   show("result");
-
-  let speed = (score / 25).toFixed(2);
+  let speed = (score/25).toFixed(2);
 
   if(win){
     let earned = Math.floor(score*1.5);
