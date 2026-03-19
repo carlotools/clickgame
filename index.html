@@ -1,53 +1,56 @@
-<!DOCTYPE html><html>
+<!DOCTYPE html><html lang="en">
 <head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tap Grid Game</title><style>
+<title>Bottom-Tap Magic Tiles</title>
+<style>
 body {
   margin:0;
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   background:#f5f5f5;
   text-align:center;
-}
-
-button {
-  padding:12px;
-  margin:5px;
-  border:none;
-  border-radius:8px;
-  background:#4CAF50;
-  color:white;
-  font-size:16px;
-}
-
-#topbar {
-  position:absolute;
-  top:10px;
-  right:15px;
-  font-weight:bold;
+}#topbar {
+position:fixed;
+top:10px;
+right:15px;
+font-weight:bold;
+z-index:10;
 }
 
 .screen { display:none; }
 .active { display:block; }
 
+button {
+padding:12px 20px;
+margin:8px;
+font-size:16px;
+border:none;
+border-radius:8px;
+background:#4CAF50;
+color:white;
+cursor:pointer;
+}
+
 .grid {
-  display:grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap:5px;
-  padding:10px;
+display:grid;
+grid-template-columns: repeat(5, 1fr);
+gap:5px;
+max-width:400px;
+margin:20px auto;
 }
 
 .tile {
-  height:40px;
-  background:#ddd;
-  border-radius:5px;
+height:60px;
+border-radius:5px;
+background:#ddd;
 }
+.tile.correct { background:#4CAF50; }
+.tile.bottom { border:2px solid #000; }
+</style>
 
-.correct {
-  background:#4CAF50 !important;
-}
-
-</style></head><body><div id="topbar">Coins: <span id="coins">0</span></div><!-- HOME --><div id="home" class="screen active">
-  <h1>Tap Grid</h1>
+</head>
+<body><div id="topbar">Coins: <span id="coins">0</span></div><!-- HOME --><div id="home" class="screen active">
+  <h1>Bottom-Tap Tiles</h1>
   <button onclick="goPlay()">Play</button>
   <button onclick="goStore()">Store</button>
   <button onclick="goInfo()">Info</button>
@@ -69,7 +72,7 @@ button {
   <button onclick="goHome()">Return</button>
 </div><!-- GAME --><div id="game" class="screen">
   <h2 id="status">Get Ready</h2>
-  <p>Time: <span id="time">25</span></p>
+  <p>Time: <span id="time">25</span> | Score: <span id="score">0</span></p>
   <div class="grid" id="grid"></div>
 </div><!-- RESULT --><div id="result" class="screen">
   <h2 id="resultText"></h2>
@@ -77,9 +80,8 @@ button {
   <button onclick="goHome()">Return</button>
   <button onclick="goPlay()">Again</button>
 </div><script>
-let coins = localStorage.getItem("coins") || 0;
+let coins = parseInt(localStorage.getItem("coins")) || 0;
 let hardOwned = localStorage.getItem("hardOwned") === "true";
-
 document.getElementById("coins").innerText = coins;
 
 function show(id){
@@ -102,9 +104,7 @@ function buyHard(){
     localStorage.setItem("hardOwned", true);
     updateCoins();
     alert("Bought Hard Mode!");
-  } else {
-    alert("Not enough coins!");
-  }
+  } else alert("Not enough coins!");
 }
 
 function updateCoins(){
@@ -112,17 +112,20 @@ function updateCoins(){
   document.getElementById("coins").innerText = coins;
 }
 
-let timer, timeLeft, score, currentCorrect;
+// Game variables
+let timer, timeLeft, score, gridRows, mode;
+const cols = 5;
 
-function startGame(mode){
-  if(mode==="hard" && !hardOwned){
-    alert("Buy Hard Mode first!");
-    return;
-  }
+function startGame(selectedMode){
+  mode = selectedMode;
+  if(mode==="hard" && !hardOwned){ alert("Buy Hard Mode first!"); return; }
 
   show("game");
   score = 0;
   timeLeft = 25;
+  gridRows = 5;
+
+  document.getElementById("score").innerText = score;
 
   let countdown = 3;
   document.getElementById("status").innerText = "Starting in " + countdown;
@@ -132,49 +135,52 @@ function startGame(mode){
     document.getElementById("status").innerText = "Starting in " + countdown;
     if(countdown<=0){
       clearInterval(c);
-      runGame(mode);
+      runGame();
     }
   },1000);
 }
 
-function runGame(mode){
+function runGame(){
   timer = setInterval(()=>{
     timeLeft--;
     document.getElementById("time").innerText = timeLeft;
-
-    if(timeLeft<=0){
-      endGame(true);
-    }
+    if(timeLeft<=0) endGame(true);
   },1000);
-
-  spawn(mode);
+  spawnGrid();
 }
 
-function spawn(mode){
+function spawnGrid(){
   let grid = document.getElementById("grid");
   grid.innerHTML = "";
 
-  let total = mode==="hard" ? 120 : 100;
-  currentCorrect = Math.floor(Math.random()*total);
+  // Number of rows
+  let rows = gridRows;
+  let totalTiles = rows * cols;
 
-  for(let i=0;i<total;i++){
-    let div = document.createElement("div");
-    div.className = "tile";
+  // Random bottom row tile positions
+  let bottomRow = rows-1;
+  let correctTileIndex = Math.floor(Math.random()*cols);
 
-    if(i===currentCorrect){
-      div.classList.add("correct");
+  for(let r=0; r<rows; r++){
+    for(let c=0; c<cols; c++){
+      let tile = document.createElement("div");
+      tile.classList.add("tile");
+      if(r===bottomRow) tile.classList.add("bottom");
+      if(r===bottomRow && c===correctTileIndex) tile.dataset.correct = "true";
+
+      tile.addEventListener("click", ()=>{
+        if(r!==bottomRow) return endGame(false); // clicked above bottom row = lose
+        if(tile.dataset.correct==="true"){
+          score++;
+          document.getElementById("score").innerText = score;
+          spawnGrid(); // next tiles
+        } else {
+          endGame(false);
+        }
+      });
+
+      grid.appendChild(tile);
     }
-
-    div.onclick = ()=>{
-      if(i === currentCorrect){
-        score++;
-        spawn(mode);
-      } else {
-        endGame(false);
-      }
-    }
-
-    grid.appendChild(div);
   }
 }
 
@@ -182,20 +188,17 @@ function endGame(win){
   clearInterval(timer);
   show("result");
 
-  let speed = score / 25;
+  let speed = (score / 25).toFixed(2);
 
   if(win){
-    let earned = Math.floor(score * 1.5);
+    let earned = Math.floor(score*1.5);
     coins += earned;
     updateCoins();
-
     document.getElementById("resultText").innerText = "You Survived!";
-    document.getElementById("scoreText").innerText =
-      "Score: " + score + " | Speed: " + speed.toFixed(2) + " | Coins +" + earned;
+    document.getElementById("scoreText").innerText = "Score: " + score + " | Speed: " + speed + " | Coins +" + earned;
   } else {
-    document.getElementById("resultText").innerText = "You Missed!";
-    document.getElementById("scoreText").innerText =
-      "Score: " + score + " | Speed: " + speed.toFixed(2);
+    document.getElementById("resultText").innerText = "Game Over!";
+    document.getElementById("scoreText").innerText = "Score: " + score + " | Speed: " + speed;
   }
 }
 </script></body>
